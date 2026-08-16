@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>操作手冊 · AI 快速語音產生器</title>
+<style>
+  :root{
+    --bg:#0f1512; --panel:#182019; --line:#2c3a30; --text:#eef4ef; --text-dim:#a9bcac; --accent:#2dd4bf;
+    --font-sans:"Microsoft JhengHei","PingFang TC","Noto Sans TC",sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font-sans);line-height:1.75;padding:0 0 60px;}
+  .wrap{max-width:760px;margin:0 auto;padding:32px 20px;}
+  a{color:var(--accent);}
+  h1{font-size:24px;margin:0 0 6px;}
+  h1 + p{color:var(--text-dim);font-size:13.5px;margin:0 0 28px;}
+  h2{font-size:17px;margin:34px 0 10px;border-bottom:1px solid var(--line);padding-bottom:8px;}
+  table{width:100%;border-collapse:collapse;font-size:13.5px;margin:12px 0;}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top;}
+  th{color:var(--text-dim);font-weight:600;font-size:12.5px;}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin:14px 0;}
+  ul,ol{padding-left:20px;}
+  code{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:1px 6px;font-size:13px;}
+  .backlink{display:inline-block;margin-bottom:20px;font-size:13px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="backlink" href="index.html">← 回到工具首頁</a>
+  <h1>AI 快速語音產生器（純瀏覽器版）· 操作手冊</h1>
+  <p>打開網頁就能用，不需要下載安裝、不需要伺服器。輸入文字直接生成語音，或生成兩人對話語音，可下載成 mp3 檔。</p>
+
+  <h2>快速開始</h2>
+  <div class="card">
+    <p><strong>單人語音：</strong>在「🎙️ 單人語音」分頁貼上文字（或上傳 .txt 檔），選一種聲音與語速，按「🎧 產生語音」，幾秒後即可試聽並下載。單次最多 2000 字。</p>
+  </div>
+  <div class="card">
+    <p><strong>雙人對話：</strong>切到「💬 雙人對話」分頁，依「講者：內容」格式逐行輸入對話講稿，例如：</p>
+    <pre style="white-space:pre-wrap;background:var(--bg);padding:10px 12px;border-radius:6px;border:1px solid var(--line);">甲：早安，今天想聊聊什麼？
+乙：我在想要不要來討論一下這個新專案。
+甲：好啊，你先說說看你的想法。</pre>
+    <p>系統會自動偵測講者名稱（必須剛好是 2 位，且每行拼寫要一致），分別指定兩位講者要用的聲音，按「🎧 產生對話語音」即可生成整段對話。</p>
+  </div>
+
+  <h2>這個版本跟「本機版」的差異</h2>
+  <p>這個工具還有一個<a href="../">本機版</a>（需要下載到自己電腦、用 Python 執行）。兩者功能相同，差異在於：</p>
+  <table>
+    <tr><th></th><th>純瀏覽器版（這個網頁）</th><th>本機版</th></tr>
+    <tr><td>安裝</td><td>不需要，打開網址就能用</td><td>需要下載、安裝 Python</td></tr>
+    <tr><td>雙人對話句子間停頓</td><td>沒有（沒有 ffmpeg 可以插入靜音，句子直接銜接）</td><td>可調整停頓毫秒數</td></tr>
+    <tr><td>配音方式</td><td>透過一個輕量代理服務轉發</td><td>直接連線語音服務</td></tr>
+  </table>
+
+  <h2>聲音選項</h2>
+  <p>配音使用微軟線上語音服務的制式聲音，共 6 種可選：</p>
+  <table>
+    <tr><th>聲音</th><th>特色</th></tr>
+    <tr><td>男聲・沉穩（台灣）</td><td>台灣腔，適合正式內容</td></tr>
+    <tr><td>女聲・親切（台灣）</td><td>台灣腔，日常對話語氣</td></tr>
+    <tr><td>女聲・活潑（台灣）</td><td>台灣腔，語氣輕快</td></tr>
+    <tr><td>男聲・穩重（中國腔）</td><td>中國腔，穩重語氣</td></tr>
+    <tr><td>女聲・溫暖（中國腔）</td><td>中國腔，溫暖語氣</td></tr>
+    <tr><td>女聲・俏皮（中國腔）</td><td>中國腔，語氣俏皮</td></tr>
+  </table>
+  <p>這些都是<strong>制式聲音</strong>，不是任何真人的聲音克隆。</p>
+
+  <h2>為什麼需要一個「代理網址」</h2>
+  <p>線上語音合成服務會檢查連線來源，瀏覽器基於安全設計不允許網頁自訂這個來源標頭，所以網頁沒辦法直接連上去要配音。頁面下方「🔧 語音服務代理網址」已經幫你填好一個公用代理，正常情況下不需要更動。如果公用代理太多人用而變慢或暫時失效，可以展開「🚀 想擁有自己專屬的配音服務？」，跟著步驟免費申請一個只有你自己在用的代理（約 5 分鐘，不需要信用卡）。</p>
+
+  <h2>上傳文字檔</h2>
+  <p>支援 <code>.txt</code> 純文字檔，會自動偵測編碼（UTF-8 或 Big5／cp950 皆可正確讀取中文），不需要自己先轉檔。</p>
+
+  <h2>常見問題</h2>
+  <div class="card">
+    <p><strong>Q：生成失敗，顯示連線錯誤怎麼辦？</strong><br>請確認網路連線正常；若持續失敗，可能是公用代理暫時人多壅塞，可以稍後重試，或依「🚀 想擁有自己專屬的配音服務？」申請一個自己專用的代理。</p>
+  </div>
+  <div class="card">
+    <p><strong>Q：雙人對話一直顯示「偵測到 N 位講者」不是 2 位怎麼辦？</strong><br>請檢查每一行講者名稱拼寫是否完全一致（例如不要有時寫「甲」有時寫「Ａ」），且每行都要用全形或半形冒號分隔講者與內容。</p>
+  </div>
+  <div class="card">
+    <p><strong>Q：我可以自己架設代理嗎？資料會不會被存起來？</strong><br>可以，見上方「為什麼需要一個代理網址」。代理程式碼（<code>worker.js</code>）只會把文字轉送給語音服務、取得音訊後原封不動回傳，不會儲存任何內容，程式碼公開在這個工具的 GitHub repo 裡可以自行檢視。</p>
+  </div>
+
+  <h2>隱私與使用限制</h2>
+  <ul>
+    <li>輸入的文字只會經由代理送到微軟線上語音服務做語音合成，代理本身不儲存任何內容。</li>
+    <li>生成的音檔只存在你瀏覽器的記憶體裡（下載後才會存到你的裝置），重新整理頁面就會消失。</li>
+    <li>請勿用來生成足以誤導他人、冒充真實人物、或用於詐騙的內容。</li>
+    <li>僅供教學、課程及個人使用，禁止未經授權公開發布、販售或商業化使用。</li>
+  </ul>
+
+  <h2>創作者資料</h2>
+  <p><strong>Mark Tsai（蔡豐全）</strong></p>
+  <p>聯絡信箱：<a href="mailto:tsaimark@gmail.com">tsaimark@gmail.com</a></p>
+</div>
+</body>
+</html>
