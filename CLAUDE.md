@@ -28,6 +28,10 @@
 
 **2026-08-20 更新（`Code.gs` 未改動、不需重新部署）**：`render()` 新增 `lastKey`（`JSON.stringify(items)`）比對，內容沒變就不重繪，CSS animation 不再被重置歸零重跑；新增 `appendParsedText()`／`buildTrackContent()` 支援 `[文字](https://...)` 連結語法（`createTextNode` 組 DOM，避免 XSS），資料格式仍是純字串陣列，向下相容。已 commit＋push（GitHub Pages 自動重新部署）。
 
+## 訪客次數計數器（2026-08-20 新增）
+
+頁尾 `.footer-meta` 加了 `visitor-badge.laobi.icu` 的 SVG badge（`page_id=m255525.aivoicegenerator`），免金鑰免後端，比照 `SocialPost`／`mrvideo_s`／`coffee-ig-planner` 既有慣例。**只加在 `web/`（GitHub Pages 已上線這一份）**，父層本機版（`ai-voice-generator/index.html`）沒有公開網址、訪客數對本機工具無意義，不需要加。
+
 ## 已驗證（整體）
 
 本機靜態伺服器 + 正式線上網址（`m255525.github.io/ai-voice-generator-play`）都用 Playwright 對**真實存在、目前仍在線上**的共用 Cloudflare Worker 做過端對端測試——單人語音生成成功、時長量測正確；雙人對話兩句話正確生成並串接成一個可播放的音檔；Service Worker 正確註冊為 `activated`；`worker.js` 嵌入版與檔案版逐字元比對一致（6055 bytes）。GitHub Actions 部署（`deploy-pages.yml`）已確認跑過一次 `success`。
