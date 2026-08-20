@@ -26,6 +26,8 @@
 
 **已驗證**：Node `fetch()` 直接打共用端點確認能拿到正確的 `marquee` 陣列（**curl 直接 `-L -X POST` 這個網址會因為 302 轉址被降級成 GET 而報 411，是 curl 本身的行為，不代表端點壞掉**，測這個端點要用 `fetch()` 或瀏覽器）；Playwright 對本機靜態伺服器實際驗證跑馬燈正確顯示、`body.has-marquee`／`.topbar top:30px` 皆正確套用。
 
+**2026-08-20 更新（`Code.gs` 未改動、不需重新部署）**：`render()` 新增 `lastKey`（`JSON.stringify(items)`）比對，內容沒變就不重繪，CSS animation 不再被重置歸零重跑；新增 `appendParsedText()`／`buildTrackContent()` 支援 `[文字](https://...)` 連結語法（`createTextNode` 組 DOM，避免 XSS），資料格式仍是純字串陣列，向下相容。已 commit＋push（GitHub Pages 自動重新部署）。
+
 ## 已驗證（整體）
 
 本機靜態伺服器 + 正式線上網址（`m255525.github.io/ai-voice-generator-play`）都用 Playwright 對**真實存在、目前仍在線上**的共用 Cloudflare Worker 做過端對端測試——單人語音生成成功、時長量測正確；雙人對話兩句話正確生成並串接成一個可播放的音檔；Service Worker 正確註冊為 `activated`；`worker.js` 嵌入版與檔案版逐字元比對一致（6055 bytes）。GitHub Actions 部署（`deploy-pages.yml`）已確認跑過一次 `success`。
