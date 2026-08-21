@@ -89,7 +89,7 @@
   }
   .banner.show{display:block;}
 
-  .modeTabs{display:flex;gap:10px;margin-bottom:18px;}
+  .modeTabs{display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap;}
   .mode-btn{
     flex:1;background:var(--panel);border:1px solid var(--line);color:var(--text-dim);
     border-radius:10px;padding:12px 14px;font-family:inherit;font-size:14px;cursor:pointer;transition:.15s;
@@ -184,6 +184,19 @@
   }
   .footer-meta a{color:var(--text-dim);}
 
+  .sttBtn{
+    background:var(--panel-raised);border:1px solid var(--line);color:var(--text);
+    border-radius:8px;padding:9px 16px;font-size:13.5px;cursor:pointer;font-family:inherit;transition:.15s;
+  }
+  .sttBtn:hover{border-color:var(--accent);color:var(--accent);}
+  .sttBtn:disabled{opacity:.5;cursor:default;}
+  #sttStartBtn.recording{background:var(--red);color:#2a0006;}
+  #sttStartBtn.recording:hover{background:var(--red);}
+  #sttStartBtn .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#2a0006;margin-right:6px;animation:stt-pulse 1s ease-in-out infinite;}
+  @keyframes stt-pulse{0%,100%{opacity:1;}50%{opacity:.25;}}
+  .sttInterim{font-size:12.5px;color:var(--text-faint);font-style:italic;min-height:16px;margin-top:8px;}
+  .sttActions{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;}
+
   @media (max-width:600px){
     .modeTabs{flex-direction:column;}
     .voicePair, .row{flex-direction:column;}
@@ -215,6 +228,7 @@
   <div class="modeTabs">
     <button type="button" class="mode-btn active" data-mode="single">🎙️ 單人語音</button>
     <button type="button" class="mode-btn" data-mode="dialogue">💬 雙人對話</button>
+    <button type="button" class="mode-btn" data-mode="stt">📝 語音轉文字</button>
   </div>
 
   <!-- ===== 單人語音 ===== -->
@@ -296,6 +310,39 @@
         <audio controls id="dialogueAudio"></audio>
         <div class="resultMeta" id="dialogueMeta"></div>
         <a class="downloadBtn" id="dialogueDownload" download>⬇️ 下載聲音檔</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== 語音轉文字 ===== -->
+  <section id="panel-stt" style="display:none;">
+    <div class="card">
+      <h2><span class="num">1</span>錄音</h2>
+      <p class="hint">按「開始錄音」後對著麥克風說話，會即時轉成文字。這個功能只支援即時錄音，不支援上傳已錄好的音檔（瀏覽器沒有提供把音檔餵給語音辨識的方式）。</p>
+      <div class="row">
+        <div>
+          <label class="field-label" for="sttLang">辨識語言</label>
+          <select id="sttLang">
+            <option value="zh-TW">中文（台灣）</option>
+            <option value="zh-CN">中文（中國）</option>
+            <option value="en-US">English（美式）</option>
+          </select>
+        </div>
+      </div>
+      <button type="button" class="genBtn" id="sttStartBtn"><span class="dot" style="display:none;"></span>🎤 開始錄音</button>
+      <div class="speakerStatus idle" id="sttStatus">尚未開始，按上方按鈕並允許麥克風權限</div>
+      <div class="sttInterim" id="sttInterim"></div>
+    </div>
+
+    <div class="card">
+      <h2><span class="num">2</span>文字稿</h2>
+      <p class="hint">辨識結果會累加在下方，可以直接編輯修正。</p>
+      <textarea id="sttResult" placeholder="辨識出的文字會出現在這裡..."></textarea>
+      <div class="sttActions">
+        <button type="button" class="sttBtn" id="sttCopyBtn">📋 複製文字</button>
+        <button type="button" class="sttBtn" id="sttDownloadBtn">⬇️ 下載 .txt</button>
+        <button type="button" class="sttBtn" id="sttClearBtn">🗑 清空</button>
+        <span class="copyMsg" id="sttCopyMsg"></span>
       </div>
     </div>
   </section>
@@ -502,6 +549,7 @@ export default {
     <strong>使用須知</strong>
     <ul>
       <li>配音使用線上語音服務（制式聲音，非真人聲音克隆），透過一個輕量代理轉發，需要網路連線；生成內容不會保存在任何第三方伺服器。</li>
+      <li>語音轉文字使用瀏覽器內建的線上辨識服務（例如 Chrome 會將錄音傳送到 Google 伺服器辨識），需要網路連線；僅支援即時錄音，不支援上傳既有音檔。</li>
       <li>請勿用來生成足以誤導他人、冒充真實人物、或用於詐騙的內容。</li>
       <li>僅供教學、課程及個人使用，禁止未經授權公開發布、販售或商業化使用。</li>
     </ul>
@@ -610,6 +658,7 @@ document.querySelectorAll('.mode-btn').forEach(btn=>{
     const mode = btn.dataset.mode;
     $('panel-single').style.display = mode === 'single' ? '' : 'none';
     $('panel-dialogue').style.display = mode === 'dialogue' ? '' : 'none';
+    $('panel-stt').style.display = mode === 'stt' ? '' : 'none';
   });
 });
 
@@ -959,6 +1008,132 @@ $('dialogueGenBtn').addEventListener('click', async ()=>{
       navigator.serviceWorker.register('service-worker.js').catch(function () {});
     });
   }
+})();
+</script>
+
+<script>
+/* ================= 語音轉文字（獨立運作，純瀏覽器 Web Speech API，跟 TTS 代理無關）================= */
+(function () {
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+  var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+  var startBtn = $('sttStartBtn');
+  var statusEl = $('sttStatus');
+  var interimEl = $('sttInterim');
+  var resultEl = $('sttResult');
+  var langSel = $('sttLang');
+  var copyBtn = $('sttCopyBtn');
+  var downloadBtn = $('sttDownloadBtn');
+  var clearBtn = $('sttClearBtn');
+  var copyMsg = $('sttCopyMsg');
+
+  function setStatus(cls, text) {
+    statusEl.className = 'speakerStatus ' + cls;
+    statusEl.textContent = text;
+  }
+
+  if (!SR) {
+    setStatus('bad', '⚠️ 此瀏覽器不支援語音辨識，建議改用 Chrome 或 Edge');
+    startBtn.disabled = true;
+    return;
+  }
+
+  var recognition = new SR();
+  recognition.continuous = true;
+  recognition.interimResults = true;
+  var listening = false; // 使用者「想不想繼續聽」的意圖旗標，跟瀏覽器實際的 onend 事件分開判斷
+
+  recognition.onresult = function (event) {
+    var finalChunk = '', interim = '';
+    for (var i = event.resultIndex; i < event.results.length; i++) {
+      var r = event.results[i];
+      if (r.isFinal) finalChunk += r[0].transcript;
+      else interim += r[0].transcript;
+    }
+    if (finalChunk) {
+      resultEl.value += finalChunk;
+    }
+    interimEl.textContent = interim;
+  };
+
+  recognition.onerror = function (event) {
+    if (event.error === 'no-speech') return; // 沒偵測到聲音不是錯誤，繼續聽
+    listening = false;
+    startBtn.classList.remove('recording');
+    startBtn.innerHTML = '<span class="dot" style="display:none;"></span>🎤 開始錄音';
+    interimEl.textContent = '';
+    if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+      setStatus('bad', '⚠️ 麥克風權限被拒絕，請在瀏覽器網址列旁允許權限後再試');
+    } else if (event.error === 'audio-capture') {
+      setStatus('bad', '⚠️ 找不到麥克風裝置');
+    } else {
+      setStatus('bad', '⚠️ 語音辨識發生錯誤：' + event.error);
+    }
+  };
+
+  recognition.onend = function () {
+    if (listening) {
+      // Chrome 在停頓一段時間後會自動結束，使用者仍在錄音狀態時自動續聽
+      try { recognition.start(); } catch (e) {}
+    } else {
+      startBtn.classList.remove('recording');
+      startBtn.innerHTML = '<span class="dot" style="display:none;"></span>🎤 開始錄音';
+      interimEl.textContent = '';
+      setStatus('idle', '已停止');
+    }
+  };
+
+  startBtn.addEventListener('click', function () {
+    if (listening) {
+      listening = false;
+      try { recognition.stop(); } catch (e) {}
+      return;
+    }
+    recognition.lang = langSel.value;
+    try {
+      recognition.start();
+      listening = true;
+      startBtn.classList.add('recording');
+      startBtn.innerHTML = '<span class="dot"></span>⏹ 停止錄音';
+      setStatus('ok', '🎧 聆聽中，請開始說話...');
+    } catch (e) {
+      setStatus('bad', '⚠️ 無法啟動錄音：' + e.message);
+    }
+  });
+
+  copyBtn.addEventListener('click', function () {
+    var text = resultEl.value;
+    var done = function () { copyMsg.textContent = '已複製！'; setTimeout(function () { copyMsg.textContent = ''; }, 3000); };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, function () {
+        resultEl.select();
+        copyMsg.textContent = '請手動 Ctrl+C 複製（已幫你選取）';
+      });
+    } else {
+      resultEl.select();
+      copyMsg.textContent = '請手動 Ctrl+C 複製（已幫你選取）';
+    }
+  });
+
+  downloadBtn.addEventListener('click', function () {
+    var text = resultEl.value;
+    if (!text.trim()) { window.alert('目前沒有文字內容'); return; }
+    var blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'transcript.txt';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+  });
+
+  clearBtn.addEventListener('click', function () {
+    resultEl.value = '';
+    interimEl.textContent = '';
+  });
 })();
 </script>
 </body>

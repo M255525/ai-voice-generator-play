@@ -28,6 +28,21 @@
 
 **2026-08-20 更新（`Code.gs` 未改動、不需重新部署）**：`render()` 新增 `lastKey`（`JSON.stringify(items)`）比對，內容沒變就不重繪，CSS animation 不再被重置歸零重跑；新增 `appendParsedText()`／`buildTrackContent()` 支援 `[文字](https://...)` 連結語法（`createTextNode` 組 DOM，避免 XSS），資料格式仍是純字串陣列，向下相容。已 commit＋push（GitHub Pages 自動重新部署）。
 
+## 語音轉文字（2026-08-21 新增）
+
+第三個分頁「📝 語音轉文字」，跟 TTS 的 Cloudflare Worker 代理完全無關，純前端瀏覽器原生 `SpeechRecognition`（`window.SpeechRecognition || window.webkitSpeechRecognition`）本地處理。決策過程：
+
+- **為什麼不用 faster-whisper**：`web/` 是純靜態頁面沒有 Python 後端，faster-whisper 這類模型無法在瀏覽器或 Cloudflare Workers 環境跑；本機版才有條件用 faster-whisper（工作區 `auto-video-clipper` 已有現成的 `WhisperModel('small', device='cpu', compute_type='int8')` 用法可參考，但本機版目前尚未加這個功能，僅這裡的 web 版有）。
+- **為什麼不支援上傳音檔轉文字**：`SpeechRecognition` 沒有官方 API 可以餵已錄好的音檔進去辨識，只能靠麥克風即時收音；用「音檔外放讓麥克風收音」這種土法煉鋼不可靠（回音、環境音、需要外放音量），已跟使用者確認排除，只做即時錄音。
+- **瀏覽器支援度**：Chrome／Edge 支援佳，Firefox／Safari 大多不支援。`SR` 不存在時，`#sttStartBtn` 直接停用並在 `#sttStatus` 顯示提示，不讓使用者點了才發現壞掉。
+- **安全情境限制**：`SpeechRecognition` 需要 HTTPS 或 `localhost` 才能取得麥克風權限——這點跟頁面其他功能（純 `fetch` 呼叫 TTS 代理）不同，`file://` 直接開啟很可能無法用這個功能，跟本檔案最下方「指令」一節「`file://` 直接開也可以」的說明有例外，僅指 TTS 部分。
+- **自動續聽**：Chrome 的 `SpeechRecognition` 在使用者說話停頓一段時間後會自動觸發 `onend`（不是使用者按停止）。用 `listening` 旗標區分「使用者是否還想繼續聽」——`onend` 時若 `listening` 仍為 true 就自動 `recognition.start()` 續聽，避免使用者說話中間停頓被誤判成結束；按下「停止錄音」才把 `listening` 設 false，讓 `onend` 真正停下來。
+- **累加而非覆蓋**：`onresult` 只把 `isFinal` 的分段 append 進 `#sttResult`（使用者可自行編輯的 textarea），尚未定案的 interim 結果顯示在旁邊獨立的 `#sttInterim` 淡色小字，不寫入正文，避免打斷使用者手動編輯過的內容。
+- **隱私揭露**：Web Speech API 在 Chrome 等瀏覽器是把錄音送到瀏覽器廠商雲端（如 Google）辨識，不是純本地處理，已在 footer 的「使用須知」與 `manual.html` 明講。
+- **下載／複製**：下載用 `Blob(text/plain) → blob URL → 隱藏 <a download>`（跟現有音檔下載同一套模式，換成文字 MIME）；複製沿用既有 `btnCopyWorkerSrc` 的 `clipboard.writeText` + 失敗時 fallback 選取文字的模式。
+
+**已驗證**：Playwright（`browser_run_code_unsafe` 的 `page.addInitScript` 在頁面載入前把 `window.SpeechRecognition` 換成假的 class）模擬測試——分頁切換正確顯示 `panel-stt`；`onresult` 的 final/interim 分段正確累加/顯示；手動點擊「停止錄音」正確停止並重置按鈕與狀態；瀏覽器自發觸發 `onend`（模擬停頓自動結束，非使用者按停止）時正確自動續聽（`recognition.start()` 再次被呼叫，UI 仍停留在錄音中狀態）；`onerror` 的 `not-allowed`（麥克風權限被拒絕）正確顯示錯誤訊息並重置狀態；拿掉 `SpeechRecognition` 模擬不支援瀏覽器時，開始按鈕正確停用並顯示提示；複製／下載／清空按鈕功能皆正確（下載用攔截 `HTMLAnchorElement.prototype.click` 驗證觸發了正確檔名與 blob URL）。`node --check` 驗證抽出的 4 段 inline `<script>` 語法皆通過。**未做的驗證**：真實麥克風收音的辨識準確度（需要真人對著麥克風說話，無法自動化測試，需使用者自行用 Chrome 實測）。
+
 ## 訪客次數計數器（2026-08-20 新增）
 
 頁尾 `.footer-meta` 加了 `visitor-badge.laobi.icu` 的 SVG badge（`page_id=m255525.aivoicegenerator`），免金鑰免後端，比照 `SocialPost`／`mrvideo_s`／`coffee-ig-planner` 既有慣例。**只加在 `web/`（GitHub Pages 已上線這一份）**，父層本機版（`ai-voice-generator/index.html`）沒有公開網址、訪客數對本機工具無意義，不需要加。
@@ -38,4 +53,4 @@
 
 ## 指令
 
-任何靜態伺服器（`python -m http.server`）即可，`file://` 直接開也可以（配音代理是純 `fetch`，沒有 `file://` 下的 CORS 限制問題）。`node --check` 抽出的 inline `<script>` 檢查語法。本機測試 Worker：`npx wrangler dev --local`（不需要登入）。
+任何靜態伺服器（`python -m http.server`）即可，`file://` 直接開也可以（配音代理是純 `fetch`，沒有 `file://` 下的 CORS 限制問題；但語音轉文字功能需要 HTTPS 或 `localhost` 才能用麥克風，`file://` 下可能無法使用，見上方「語音轉文字」一節）。`node --check` 抽出的 inline `<script>` 檢查語法。本機測試 Worker：`npx wrangler dev --local`（不需要登入）。
