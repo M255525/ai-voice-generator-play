@@ -33,10 +33,12 @@ async function synthesize(text, voice, rate) {
   const connId = connectId();
   // 注意：這裡用 https:// 不是 wss://——Cloudflare Workers 的 fetch() 靠 Upgrade header
   // 觸發 WebSocket 升級，直接寫 wss:// 反而會被拒絕（wrangler dev 本機測試時已驗證過這點）。
+  // 2026-10 起舊主機 speech.platform.bing.com 一律回 403，Edge 改走 api.msedgeservices.com，
+  // 同一組 token 改用 Ocp-Apim-Subscription-Key 參數帶入（見 rany2/edge-tts PR #491）。
   const url =
-    'https://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1' +
-    `?TrustedClientToken=${TRUSTED_CLIENT_TOKEN}&ConnectionId=${connId}` +
-    `&Sec-MS-GEC=${gec}&Sec-MS-GEC-Version=1-135.0.3179.54`;
+    'https://api.msedgeservices.com/tts/cognitiveservices/websocket/v1' +
+    `?Ocp-Apim-Subscription-Key=${TRUSTED_CLIENT_TOKEN}&ConnectionId=${connId}` +
+    `&Sec-MS-GEC=${gec}&Sec-MS-GEC-Version=1-143.0.3650.75`;
 
   const resp = await fetch(url, {
     headers: {
@@ -47,7 +49,7 @@ async function synthesize(text, voice, rate) {
       // 服務端只接受這個 Origin，這正是瀏覽器頁面自己連不上、需要這個 Worker 代打的原因。
       Origin: 'chrome-extension://jdiccldimpdaibmpdkjnbmckianbfold',
       'User-Agent':
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36 Edg/135.0.0.0',
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0',
       'Accept-Encoding': 'gzip, deflate, br',
       'Accept-Language': 'en-US,en;q=0.9',
       Cookie: `muid=${crypto.randomUUID().replace(/-/g, '').toUpperCase()};`,
@@ -127,6 +129,39 @@ async function synthesize(text, voice, rate) {
   return out;
 }
 
+// 備援：Google 翻譯語音（免金鑰、只有一種女聲、不支援語速）。單次請求上限約 200 字，
+// 依標點切段後逐段抓 mp3 再直接位元組相接（mp3 frame 相接即可連續播放）。
+function splitForGoogle(text, max = 180) {
+  const chunks = [];
+  let buf = '';
+  for (let piece of text.split(/(?<=[。！？!?；;，,、\n])/)) {
+    piece = piece.trim();
+    while (piece.length > max) {
+      if (buf) { chunks.push(buf); buf = ''; }
+      chunks.push(piece.slice(0, max));
+      piece = piece.slice(max);
+    }
+    if (buf.length + piece.length > max) { chunks.push(buf); buf = ''; }
+    buf += piece;
+  }
+  if (buf) chunks.push(buf);
+  return chunks.filter((c) => c.trim());
+}
+async function synthesizeGoogle(text, lang) {
+  const parts = [];
+  for (const chunk of splitForGoogle(text)) {
+    const url = 'https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob' +
+      `&tl=${encodeURIComponent(lang)}&q=${encodeURIComponent(chunk)}`;
+    const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+    if (!r.ok) throw new Error(`Google 語音連線失敗（status=${r.status}）`);
+    parts.push(new Uint8Array(await r.arrayBuffer()));
+  }
+  const out = new Uint8Array(parts.reduce((a, c) => a + c.length, 0));
+  let off = 0;
+  for (const p of parts) { out.set(p, off); off += p.length; }
+  return out;
+}
+
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
@@ -152,7 +187,20 @@ export default {
           headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
         });
       }
-      const audio = await synthesize(text, voice, rate);
+      const gLang = /^google:(zh-TW|zh-CN)$/.exec(voice);
+      let audio;
+      if (gLang) {
+        audio = await synthesizeGoogle(text, gLang[1]);
+      } else {
+        try {
+          audio = await synthesize(text, voice, rate);
+        } catch (e) {
+          // 新端點對短時間內連續請求會回 429（雙人對話逐句呼叫時最容易遇到），等一下重試一次
+          if (!/status=429/.test(String(e.message))) throw e;
+          await new Promise((r) => setTimeout(r, 1500));
+          audio = await synthesize(text, voice, rate);
+        }
+      }
       return new Response(audio, {
         headers: { ...CORS_HEADERS, 'Content-Type': 'audio/mpeg', 'Content-Length': String(audio.length) },
       });

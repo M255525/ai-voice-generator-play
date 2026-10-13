@@ -10,9 +10,11 @@
 
 解法**直接沿用** `ai-video-studio/AIvideo_Studio_web/worker.js`——一支已經除錯到位（含那個「二進位訊息長度前綴 off-by-2」的知名坑，症狀是 ffmpeg 能解但瀏覽器嚴格解碼器直接拒收）、部署在 Cloudflare Workers 的極簡代理，把它原封不動複製進本資料夾的 `worker.js`。`index.html` 用 `fetch(workerUrl, {method:'POST', body:{text,voice,rate}})` 直接拿到 mp3 二進位使用，不需要工作分派/輪詢（跟本機版的 job queue 模式不同，因為單次呼叫本身就是同步等待完成）。
 
-**預設代理網址沿用同一顆已部署的 Worker**（`https://ai-video-studio-tts.pear-sea-880.workers.dev`，`AIvideo_Studio_web` 也在用同一顆），不是另外重新部署——同一個使用者的同一份 Cloudflare 帳號資源，沒有理由分裂成兩顆。頁面內建「🔧 語音服務代理網址（進階）」可覆蓋成使用者自己的代理，以及「🚀 想擁有自己專屬的配音服務？」圖形化申請教學（`<script type="text/plain" id="workerSourceCode">` 內嵌 `worker.js` 全文供一鍵複製，**內容用腳本從 `worker.js` 檔案同步寫入、逐字元驗證一致**，不是手動謄打，避免複製貼上時的轉譯或改寫風險），做法完全比照 `AIvideo_Studio_web` 已驗證過的 UX。
+**預設代理網址（2026-10-13 起）是本資料夾自己部署的 Worker** `https://ai-voice-generator-tts.content-workflow.workers.dev`（`wrangler.toml` 的 `name`，部署在使用者本人的 Cloudflare 帳號 `Tsaimark@gmail.com's Account`，workers.dev 子網域是 `content-workflow`；在本資料夾 `npx wrangler@4 deploy` 即可更新）。原本沿用的共用 Worker `ai-video-studio-tts.pear-sea-880.workers.dev` 是臨時帳號部署、不在使用者帳號底下（`wrangler deployments list` 回 10007 不存在），無法更新，而且它連的是 2026-10 起被微軟封鎖的舊主機，已經失效；頁面載入時若 localStorage 存的是這個舊網址（`RETIRED_TTS_WORKER_URLS`）會自動清掉改回新預設值。**`AIvideo_Studio_web` 仍指向那顆失效的舊 Worker**，兩邊不再共用。
 
-**風險**：這顆共用 Worker 最初是用 `wrangler deploy --temporary` 免帳號快速部署（見全域記憶 `aivideo-studio-web-project`：60 分鐘臨時帳號），但截至驗證當下（距離最初部署已 10 天）仍然存活。**若哪天這顆 Worker 真的失效，`AIvideo_Studio_web` 跟這裡會同時壞掉**，因為預設代理網址是同一個。重新部署只需要在任一個資料夾內 `wrangler deploy`，拿到新網址後兩邊的 `DEFAULT_TTS_WORKER_URL` 都要同步更新。
+**2026-10-13 Worker 修改**：(1) 連線網址改成 `https://api.msedgeservices.com/tts/cognitiveservices/websocket/v1?Ocp-Apim-Subscription-Key=<token>&ConnectionId=...&Sec-MS-GEC=...`（同 rany2/edge-tts PR #491），舊主機 `speech.platform.bing.com` 一律 403；(2) 新端點連續請求會回 429，失敗訊息含 `status=429` 時等 1.5 秒重試一次；(3) 新增 Google 翻譯語音備援：`voice` 傳 `google:zh-TW` 或 `google:zh-CN` 時改走 `synthesizeGoogle()`（依標點切成 ≤180 字逐段抓 `translate_tts?client=tw-ob`，mp3 位元組直接相接；不支援語速）。前端 `VOICE_GROUPS` 用 `<optgroup>` 分成「微軟線上語音」與「Google 語音（備援）」兩組。雙人對話可混用兩種來源（Blob 位元組串接，兩者都是 24kHz mono mp3，實測可播放）。剛部署完的前幾秒 workers.dev 會回 404（Cloudflare error 1042），等一下就好，不是程式錯誤。頁面內建「🔧 語音服務代理網址（進階）」可覆蓋成使用者自己的代理，以及「🚀 想擁有自己專屬的配音服務？」圖形化申請教學（`<script type="text/plain" id="workerSourceCode">` 內嵌 `worker.js` 全文供一鍵複製，**內容用腳本從 `worker.js` 檔案同步寫入、逐字元驗證一致**，不是手動謄打，避免複製貼上時的轉譯或改寫風險），做法完全比照 `AIvideo_Studio_web` 已驗證過的 UX。
+
+**風險**：Google 語音走的是非官方端點，哪天被擋就只剩微軟那組；微軟端點也可能再改，屆時先看 rany2/edge-tts 的 issues／PR 有沒有新修法，再同步改 `worker.js`（改完記得用腳本把 `worker.js` 全文同步進 `index.html` 的 `#workerSourceCode` 並逐字元比對）。
 
 ## 跟本機版的功能差異（刻意，不是遺漏）
 
