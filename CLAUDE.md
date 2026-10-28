@@ -14,6 +14,8 @@
 
 **2026-10-13 Worker 修改**：(1) 連線網址改成 `https://api.msedgeservices.com/tts/cognitiveservices/websocket/v1?Ocp-Apim-Subscription-Key=<token>&ConnectionId=...&Sec-MS-GEC=...`（同 rany2/edge-tts PR #491），舊主機 `speech.platform.bing.com` 一律 403；(2) 新端點連續請求會回 429，失敗訊息含 `status=429` 時等 1.5 秒重試一次；(3) 新增 Google 翻譯語音備援：`voice` 傳 `google:zh-TW` 或 `google:zh-CN` 時改走 `synthesizeGoogle()`（依標點切成 ≤180 字逐段抓 `translate_tts?client=tw-ob`，mp3 位元組直接相接；不支援語速）。前端 `VOICE_GROUPS` 用 `<optgroup>` 分成「微軟線上語音」與「Google 語音（備援）」兩組。雙人對話可混用兩種來源（Blob 位元組串接，兩者都是 24kHz mono mp3，實測可播放）。剛部署完的前幾秒 workers.dev 會回 404（Cloudflare error 1042），等一下就好，不是程式錯誤。頁面內建「🔧 語音服務代理網址（進階）」可覆蓋成使用者自己的代理，以及「🚀 想擁有自己專屬的配音服務？」圖形化申請教學（`<script type="text/plain" id="workerSourceCode">` 內嵌 `worker.js` 全文供一鍵複製，**內容用腳本從 `worker.js` 檔案同步寫入、逐字元驗證一致**，不是手動謄打，避免複製貼上時的轉譯或改寫風險），做法完全比照 `AIvideo_Studio_web` 已驗證過的 UX。
 
+**2026-10-28 第二次修（微軟語音又斷）**：Worker 連 `api.msedgeservices.com` 升級失敗（`Upgrade 失敗，status=200`，本機 Python 連同一端點仍正常，推測是擋 Cloudflare 出口）。改用 edge-tts 7.3.1 的做法：**回舊主機 `speech.platform.bing.com`，帶 v2 版 Sec-MS-GEC**（`Sec-MS-GEC-Version=2-143.0.3650.75`；簽章是自訂初始狀態的 SHA-256＋CS64 雜湊，格式 `<16 hex>-<64 hex>`，從上游 `drm.py` 移植成 `generateSecMsGecV2()`，全部用 `>>>0`／`Math.imul` 做 32-bit 運算）。`openEdgeSocket()` 依序試「舊主機＋v2」→「新端點＋v1」，都失敗才報錯（status 用 `/` 串起來）。驗證法：本機 `wrangler dev` 的 workerd 會被 Smart App Control 擋（spawn UNKNOWN），改用 Node 跑 `generateSecMsGecV2()` 產生簽章、Python aiohttp 帶著它直連舊主機——拿到音訊；故意給錯簽章的對照組回 403。
+
 **風險**：Google 語音走的是非官方端點，哪天被擋就只剩微軟那組；微軟端點也可能再改，屆時先看 rany2/edge-tts 的 issues／PR 有沒有新修法，再同步改 `worker.js`（改完記得用腳本把 `worker.js` 全文同步進 `index.html` 的 `#workerSourceCode` 並逐字元比對）。
 
 ## 跟本機版的功能差異（刻意，不是遺漏）
