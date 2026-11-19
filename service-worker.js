@@ -1,6 +1,6 @@
 // 僅供「加入主畫面」安裝需求使用：network-first + 同源快取備援，不快取跨網域請求
 // （語音代理 Worker 是跨網域請求，本來就不會被這個規則攔到）。
-const CACHE_NAME = 'ai-voice-generator-web-shell-v1';
+const CACHE_NAME = 'ai-voice-generator-web-shell-v2';
 const SHELL_FILES = [
   './',
   './index.html',
@@ -20,7 +20,7 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k))))
+      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE_NAME && k.indexOf(CACHE_NAME.replace(/\d+$/, '')) === 0).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
