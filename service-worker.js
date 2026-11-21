@@ -1,6 +1,6 @@
 // 僅供「加入主畫面」安裝需求使用：network-first + 同源快取備援，不快取跨網域請求
 // （語音代理 Worker 是跨網域請求，本來就不會被這個規則攔到）。
-const CACHE_NAME = 'ai-voice-generator-web-shell-v2';
+const CACHE_NAME = 'ai-voice-generator-web-shell-v3';
 const SHELL_FILES = [
   './',
   './index.html',

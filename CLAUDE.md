@@ -62,3 +62,7 @@
 ## 2026-11-21：Worker 暫時性錯誤重試
 
 微軟服務對 `zh-TW-YunJheNeural` 常「連上了卻不回音訊」（官方 Python edge_tts 也 6/10 失敗）。`worker.js` 改成「沒有收到音訊資料／429／連線錯誤／逾時」最多試 4 次，已部署；與 `ai-video-studio/AIvideo_Studio_web/worker.js` 及兩頁內嵌 `#workerSourceCode` 保持逐字相同。
+
+## 2026-11-21：字幕配音（SRT）
+
+新分頁「🎬 字幕配音」，**不用 ffmpeg、不解碼**：逐句呼叫 Worker 拿 mp3，`mp3Frames()` 依幀頭拆成乾淨幀（去 ID3、Xing/Info、壞位元組，用幀數×576／24000 算出精確長度），`Mp3Timeline.place()` 在空檔塞**全零靜音幀**（header＋零 side info＝main_data_begin 0，不影響位元儲存池，跟語音同位元率），最前面放 **Xing 檔頭**寫總幀數／位元組——微軟 48kbps、Google 64kbps（兩者都是 24kHz mono MPEG-2 L3）混用時沒有 Xing 播放器會算錯總長。精度約 24ms（一幀）。念太長用較快語速重新呼叫 Worker（`speedupRate()`，Google 不支援就只順延並標示）。解析規則與父層 `launcher.py` 的 `parse_srt()` 同一套（見父層 CLAUDE.md「字幕配音」）。已用 ffmpeg silencedetect 確認各句開始時間、Playwright 跑完整畫面（播放器顯示總長正確）。
