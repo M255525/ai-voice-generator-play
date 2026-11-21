@@ -58,3 +58,7 @@
 ## 指令
 
 任何靜態伺服器（`python -m http.server`）即可，`file://` 直接開也可以（配音代理是純 `fetch`，沒有 `file://` 下的 CORS 限制問題；但語音轉文字功能需要 HTTPS 或 `localhost` 才能用麥克風，`file://` 下可能無法使用，見上方「語音轉文字」一節）。`node --check` 抽出的 inline `<script>` 檢查語法。本機測試 Worker：`npx wrangler dev --local`（不需要登入）。
+
+## 2026-11-21：Worker 暫時性錯誤重試
+
+微軟服務對 `zh-TW-YunJheNeural` 常「連上了卻不回音訊」（官方 Python edge_tts 也 6/10 失敗）。`worker.js` 改成「沒有收到音訊資料／429／連線錯誤／逾時」最多試 4 次，已部署；與 `ai-video-studio/AIvideo_Studio_web/worker.js` 及兩頁內嵌 `#workerSourceCode` 保持逐字相同。
