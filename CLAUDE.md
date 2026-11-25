@@ -4,19 +4,13 @@
 
 使用者要求「做一個可以使用的網頁」（本機版需要 Python 環境，無法滿足「打開網址就能用」）而新建，2026-08-16。已推送公開 repo **`M255525/ai-voice-generator-play`** 並啟用 GitHub Pages（Actions workflow 部署）：<https://m255525.github.io/ai-voice-generator-play/>。
 
-## 架構關鍵：為什麼需要一個「代理」
+## 架構：官方語音 API（2026-11-25 起）
 
-瀏覽器 JS 不能自訂 WebSocket 的 `Origin` header，而微軟線上語音服務會檢查這個 header，純前端頁面天生連不上（`ai-video-studio/AIvideo_Studio_web/CLAUDE.md` 已經用真實 Chrome 分頁＋Node `ws` 套件做過完整對照實驗，證明這是無法繞過的瀏覽器安全限制，不是程式碼 bug）。
-
-解法**直接沿用** `ai-video-studio/AIvideo_Studio_web/worker.js`——一支已經除錯到位（含那個「二進位訊息長度前綴 off-by-2」的知名坑，症狀是 ffmpeg 能解但瀏覽器嚴格解碼器直接拒收）、部署在 Cloudflare Workers 的極簡代理，把它原封不動複製進本資料夾的 `worker.js`。`index.html` 用 `fetch(workerUrl, {method:'POST', body:{text,voice,rate}})` 直接拿到 mp3 二進位使用，不需要工作分派/輪詢（跟本機版的 job queue 模式不同，因為單次呼叫本身就是同步等待完成）。
-
-**預設代理網址（2026-10-13 起）是本資料夾自己部署的 Worker** `https://ai-voice-generator-tts.content-workflow.workers.dev`（`wrangler.toml` 的 `name`，部署在使用者本人的 Cloudflare 帳號 `Tsaimark@gmail.com's Account`，workers.dev 子網域是 `content-workflow`；在本資料夾 `npx wrangler@4 deploy` 即可更新）。原本沿用的共用 Worker `ai-video-studio-tts.pear-sea-880.workers.dev` 是臨時帳號部署、不在使用者帳號底下（`wrangler deployments list` 回 10007 不存在），無法更新，而且它連的是 2026-10 起被微軟封鎖的舊主機，已經失效；頁面載入時若 localStorage 存的是這個舊網址（`RETIRED_TTS_WORKER_URLS`）會自動清掉改回新預設值。**`AIvideo_Studio_web` 仍指向那顆失效的舊 Worker**，兩邊不再共用。
-
-**2026-10-13 Worker 修改**：(1) 連線網址改成 `https://api.msedgeservices.com/tts/cognitiveservices/websocket/v1?Ocp-Apim-Subscription-Key=<token>&ConnectionId=...&Sec-MS-GEC=...`（同 rany2/edge-tts PR #491），舊主機 `speech.platform.bing.com` 一律 403；(2) 新端點連續請求會回 429，失敗訊息含 `status=429` 時等 1.5 秒重試一次；(3) 新增 Google 翻譯語音備援：`voice` 傳 `google:zh-TW` 或 `google:zh-CN` 時改走 `synthesizeGoogle()`（依標點切成 ≤180 字逐段抓 `translate_tts?client=tw-ob`，mp3 位元組直接相接；不支援語速）。前端 `VOICE_GROUPS` 用 `<optgroup>` 分成「微軟線上語音」與「Google 語音（備援）」兩組。雙人對話可混用兩種來源（Blob 位元組串接，兩者都是 24kHz mono mp3，實測可播放）。剛部署完的前幾秒 workers.dev 會回 404（Cloudflare error 1042），等一下就好，不是程式錯誤。頁面內建「🔧 語音服務代理網址（進階）」可覆蓋成使用者自己的代理，以及「🚀 想擁有自己專屬的配音服務？」圖形化申請教學（`<script type="text/plain" id="workerSourceCode">` 內嵌 `worker.js` 全文供一鍵複製，**內容用腳本從 `worker.js` 檔案同步寫入、逐字元驗證一致**，不是手動謄打，避免複製貼上時的轉譯或改寫風險），做法完全比照 `AIvideo_Studio_web` 已驗證過的 UX。
-
-**2026-10-28 第二次修（微軟語音又斷）**：Worker 連 `api.msedgeservices.com` 升級失敗（`Upgrade 失敗，status=200`，本機 Python 連同一端點仍正常，推測是擋 Cloudflare 出口）。改用 edge-tts 7.3.1 的做法：**回舊主機 `speech.platform.bing.com`，帶 v2 版 Sec-MS-GEC**（`Sec-MS-GEC-Version=2-143.0.3650.75`；簽章是自訂初始狀態的 SHA-256＋CS64 雜湊，格式 `<16 hex>-<64 hex>`，從上游 `drm.py` 移植成 `generateSecMsGecV2()`，全部用 `>>>0`／`Math.imul` 做 32-bit 運算）。`openEdgeSocket()` 依序試「舊主機＋v2」→「新端點＋v1」，都失敗才報錯（status 用 `/` 串起來）。驗證法：本機 `wrangler dev` 的 workerd 會被 Smart App Control 擋（spawn UNKNOWN），改用 Node 跑 `generateSecMsGecV2()` 產生簽章、Python aiohttp 帶著它直連舊主機——拿到音訊；故意給錯簽章的對照組回 403。
-
-**風險**：Google 語音走的是非官方端點，哪天被擋就只剩微軟那組；微軟端點也可能再改，屆時先看 rany2/edge-tts 的 issues／PR 有沒有新修法，再同步改 `worker.js`（改完記得用腳本把 `worker.js` 全文同步進 `index.html` 的 `#workerSourceCode` 並逐字元比對）。
+- `tts.js`（**與 `ai-video-studio/AIvideo_Studio_web/tts.js` 逐字一致，改一邊要同步**）：Google Gemini（預設 `gemini-3.8-flash-tts`，Interactions API，回 wav）、OpenAI、ElevenLabs，BYOK、瀏覽器直呼（三家都已實測 CORS 預檢通過）。設定存 `localStorage['mk.tts.v1']`（兩站同網域共用）。**尚未用真實金鑰合成過**，只用模擬回應測。
+- `MKTTS.voices()` 依服務商給聲音清單；`canSpeed()`：ElevenLabs 與 OpenAI `tts-1*` 才能調語速。OpenAI 公告 tts-1／tts-1-hd／gpt-4o-mini-tts 2027-01-06 停用，屆時要移除或換模型。
+- mp3 走 `Mp3Timeline`、wav 走 `MKTTS.WavTimeline`，介面相同（`place`／`padTo`／`time`／`blob`）。雙人對話改用時間軸，句間留 0.35 秒。
+- 免金鑰：單人語音「🔈 瀏覽器朗讀」用 `speechSynthesis`，只能試聽。
+- **語音代理 Worker 已停用**：`worker.js` 只回 410；不可恢復任何非官方語音端點（原程式模擬 Edge 瀏覽器與 Google 翻譯語音，授權不明，智財調整時移除）。下面提到 Worker、微軟／Google 語音的段落都是歷史紀錄。
 
 ## 跟本機版的功能差異（刻意，不是遺漏）
 
@@ -66,6 +60,3 @@
 ## 2026-11-21：字幕配音（SRT）
 
 新分頁「🎬 字幕配音」，**不用 ffmpeg、不解碼**：逐句呼叫 Worker 拿 mp3，`mp3Frames()` 依幀頭拆成乾淨幀（去 ID3、Xing/Info、壞位元組，用幀數×576／24000 算出精確長度），`Mp3Timeline.place()` 在空檔塞**全零靜音幀**（header＋零 side info＝main_data_begin 0，不影響位元儲存池，跟語音同位元率），最前面放 **Xing 檔頭**寫總幀數／位元組——微軟 48kbps、Google 64kbps（兩者都是 24kHz mono MPEG-2 L3）混用時沒有 Xing 播放器會算錯總長。精度約 24ms（一幀）。念太長用較快語速重新呼叫 Worker（`speedupRate()`，Google 不支援就只順延並標示）。解析規則與父層 `launcher.py` 的 `parse_srt()` 同一套（見父層 CLAUDE.md「字幕配音」）。已用 ffmpeg silencedetect 確認各句開始時間、Playwright 跑完整畫面（播放器顯示總長正確）。
-
-## 智財與來源限制（2026-11-25）
-`worker.js`（index.html 內嵌一份，兩份要逐字一致）加上 edge-tts 的 LGPLv3 授權聲明與「非官方服務、無商用授權」說明；CORS 從 `*` 改成只允許 `https://m255525.github.io` 與 localhost，其他來源回 403（curl 測試要自己帶 Origin）。使用警語同步說明並換 key（`.seen2`）讓舊使用者再看到一次。這仍是非官方服務，根本解法是改接 Azure AI Speech 等官方 API（content-workflow-studio-cf 已改），尚未決定。
