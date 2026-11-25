@@ -66,3 +66,6 @@
 ## 2026-11-21：字幕配音（SRT）
 
 新分頁「🎬 字幕配音」，**不用 ffmpeg、不解碼**：逐句呼叫 Worker 拿 mp3，`mp3Frames()` 依幀頭拆成乾淨幀（去 ID3、Xing/Info、壞位元組，用幀數×576／24000 算出精確長度），`Mp3Timeline.place()` 在空檔塞**全零靜音幀**（header＋零 side info＝main_data_begin 0，不影響位元儲存池，跟語音同位元率），最前面放 **Xing 檔頭**寫總幀數／位元組——微軟 48kbps、Google 64kbps（兩者都是 24kHz mono MPEG-2 L3）混用時沒有 Xing 播放器會算錯總長。精度約 24ms（一幀）。念太長用較快語速重新呼叫 Worker（`speedupRate()`，Google 不支援就只順延並標示）。解析規則與父層 `launcher.py` 的 `parse_srt()` 同一套（見父層 CLAUDE.md「字幕配音」）。已用 ffmpeg silencedetect 確認各句開始時間、Playwright 跑完整畫面（播放器顯示總長正確）。
+
+## 智財與來源限制（2026-11-25）
+`worker.js`（index.html 內嵌一份，兩份要逐字一致）加上 edge-tts 的 LGPLv3 授權聲明與「非官方服務、無商用授權」說明；CORS 從 `*` 改成只允許 `https://m255525.github.io` 與 localhost，其他來源回 403（curl 測試要自己帶 Origin）。使用警語同步說明並換 key（`.seen2`）讓舊使用者再看到一次。這仍是非官方服務，根本解法是改接 Azure AI Speech 等官方 API（content-workflow-studio-cf 已改），尚未決定。
